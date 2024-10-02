@@ -25,8 +25,8 @@ use mls_rs_crypto_hpke::{
 
 use mls_rs_crypto_traits::{AeadType, KdfType, KemId};
 
-use wasm_bindgen::JsValue;
-use web_sys::SubtleCrypto;
+use wasm_bindgen::{JsCast, JsValue};
+use web_sys::{Crypto, SubtleCrypto};
 use zeroize::Zeroizing;
 
 use crate::{
@@ -62,11 +62,17 @@ impl From<JsValue> for CryptoError {
 }
 
 #[inline]
+fn get_global_crypto() -> Result<Crypto, CryptoError> {
+    Ok(
+        js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("crypto"))
+            .map_err(|_| CryptoError::WindowNotFound)?
+            .dyn_into::<Crypto>()?,
+    )
+}
+
+#[inline]
 pub(crate) fn get_crypto() -> Result<SubtleCrypto, CryptoError> {
-    Ok(web_sys::window()
-        .ok_or(CryptoError::WindowNotFound)?
-        .crypto()?
-        .subtle())
+    Ok(get_global_crypto()?.subtle())
 }
 
 #[derive(Clone, Default, Debug)]
@@ -271,10 +277,7 @@ impl CipherSuiteProvider for WebCryptoCipherSuite {
     }
 
     fn random_bytes(&self, out: &mut [u8]) -> Result<(), Self::Error> {
-        web_sys::window()
-            .ok_or(CryptoError::WindowNotFound)?
-            .crypto()?
-            .get_random_values_with_u8_array(out)?;
+        get_global_crypto()?.get_random_values_with_u8_array(out)?;
 
         Ok(())
     }
